@@ -1,0 +1,6 @@
+SCRAPYD_SERVER = "http://localhost:6800"
+
+SCHEDULE_ENDPOINT = SCRAPYD_SERVER + "/schedule.json"
+DAEMON_STATUS_ENDPOINT = SCRAPYD_SERVER + "/daemonstatus.json" 
+JOB_STATUS_ENDPOINT = SCRAPYD_SERVER + "/status.json"
+LIST_JOBS_ENDPOINT = SCRAPYD_SERVER + "/listjobs.json"

@@ -1,0 +1,38 @@
+services:
+  browser:
+    image: ghcr.io/browserless/firefox
+    environment:
+      - CONCURRENT=10
+      - TOKEN=6R0W53R135510
+  
+  mongo:
+    image: mongo
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: toor
+    ports:
+      - 27017:27017
+
+  mongo-express:
+    image: mongo-express
+    restart: always
+    ports:
+      - 8081:8081
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: toor
+      ME_CONFIG_MONGODB_URL: mongodb://admin:toor@mongo:27017/
+      ME_CONFIG_BASICAUTH: false
+
+  scrapyd:
+    build:
+      context: ./scrapyd
+    ports:
+      - 6800:6800
+    
+  # app:
+  #   build:
+  #     context: ./app
+  #   ports:
+  #     - 80:80

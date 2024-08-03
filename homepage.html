@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Submission Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        header, footer {
+            background-color: #333;
+            color: white;
+            text-align: center;
+            padding: 1rem;
+        }
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+        }
+        .container {
+            background-color: #f0f0f0;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 600px;
+        }
+        form {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        input[type="url"] {
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            padding: 0.5rem 1rem;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5rem;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        #jobInfo {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Web Scraping Job Submission</h1>
+    </header>
+    <main>
+        <div class="container">
+            <form id="jobForm">
+                <input type="url" id="urlInput" placeholder="Enter URL to scrape" required>
+                <button type="submit">Submit Job</button>
+            </form>
+            <div id="jobInfo" style="display: none;">
+                <table>
+                    <tr>
+                        <th>Job ID</th>
+                        <td id="jobId"></td>
+                    </tr>
+                    <tr>
+                        <th>URL</th>
+                        <td id="jobUrl"></td>
+                    </tr>
+                    <tr>
+                        <th>Status</th>
+                        <td id="jobStatus"></td>
+                    </tr>
+                    <tr>
+                        <th>Download</th>
+                        <td><button id="downloadBtn" disabled>Download</button></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </main>
+    <footer>
+        <p>&copy; 2024 Web Scraping Job Submission. All rights reserved.</p>
+    </footer>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8080';
+        const PROJECT = 'zcrawler';
+        const SPIDER = 'web';
+
+        const jobForm = document.getElementById('jobForm');
+        const urlInput = document.getElementById('urlInput');
+        const jobInfo = document.getElementById('jobInfo');
+        const jobIdElement = document.getElementById('jobId');
+        const jobUrlElement = document.getElementById('jobUrl');
+        const jobStatusElement = document.getElementById('jobStatus');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        document.addEventListener('DOMContentLoaded', loadJobData);
+
+        jobForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const url = urlInput.value;
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/scrapyd/schedule`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        url: url, 
+                        project: PROJECT, 
+                        spider: SPIDER, 
+                        settings: {
+                            DEPTH_LIMIT: 1
+                        },
+                    }),
+                });
+                const data = await response.json();
+                
+                if (data.status === 'ok') {
+                    updateJobInfo(data.jobid, url, 'pending');
+                    pollJobStatus(data.jobid);
+                } else {
+                    alert('Failed to submit job. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error submitting job:', error);
+                alert('An error occurred while submitting the job. Please try again.');
+            }
+        });
+
+        function updateJobInfo(jobId, url, status) {
+            jobIdElement.textContent = jobId;
+            jobUrlElement.textContent = url;
+            jobStatusElement.textContent = status;
+            jobInfo.style.display = 'block';
+            downloadBtn.disabled = status !== 'finished';
+
+            const jobData = { jobId, url, status };
+            localStorage.setItem('lastJobData', JSON.stringify(jobData));
+        }
+
+        async function pollJobStatus(jobId) {
+            while (true) {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/scrapyd/jobs/${PROJECT}/${jobId}`);
+                    const data = await response.json();
+                    
+                    updateJobInfo(jobId, jobUrlElement.textContent, data.status);
+                    
+                    if (data.status === 'finished' || data.status === 'failed') {
+                        break;
+                    }
+                    
+                    await new Promise(resolve => setTimeout(resolve, 5000)); // Poll every 5 seconds
+                } catch (error) {
+                    console.error('Error polling job status:', error);
+                    break;
+                }
+            }
+        }
+
+        function loadJobData() {
+            const savedJobData = localStorage.getItem('lastJobData');
+            if (savedJobData) {
+                const { jobId, url, status } = JSON.parse(savedJobData);
+                updateJobInfo(jobId, url, status);
+                if (status !== 'finished') {
+                    pollJobStatus(jobId);
+                }
+            }
+        }
+
+        downloadBtn.addEventListener('click', async () => {
+        const jobId = jobIdElement.textContent;
+        try {
+            const response = await fetch(`${API_BASE_URL}/pages/${jobId}`);
+            if (response.ok) {
+                // Get the filename from the Content-Disposition header
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let filename = `${jobId}.jsonl`;
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
+                    if (filenameMatch && filenameMatch[1]) {
+                        filename = filenameMatch[1];
+                    }
+                }
+
+                // Create a ReadableStream from the response body
+                const reader = response.body.getReader();
+                const stream = new ReadableStream({
+                    start(controller) {
+                        return pump();
+                        function pump() {
+                            return reader.read().then(({ done, value }) => {
+                                if (done) {
+                                    controller.close();
+                                    return;
+                                }
+                                controller.enqueue(value);
+                                return pump();
+                            });
+                        }
+                    }
+                });
+
+                // Create a new response from the stream
+                const newResponse = new Response(stream);
+
+                // Get the blob from the new response
+                const blob = await newResponse.blob();
+
+                // Create a download link and trigger the download
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+            } else {
+                alert('Failed to download the result. Please try again.');
+            }
+        } catch (error) {
+                console.error('Error downloading result:', error);
+                alert('An error occurred while downloading the result. Please try again.');
+            }
+        });
+    </script>
+</body>
+</html>
